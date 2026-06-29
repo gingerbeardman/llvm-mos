@@ -68,9 +68,12 @@ MOSLegalizerInfo::MOSLegalizerInfo(const MOSSubtarget &STI) {
   LLT P = LLT::pointer(0, 16);
   LLT PZ = LLT::pointer(1, 8);
 
-  // Experimental: keep i16 add/sub/and/or/xor un-narrowed so they can be
-  // selected to native 16-bit accumulator pseudos (REP/SEP regions).
-  const bool Nat16 = STI.hasNative16BitAccumulator();
+  // Experimental native 16-bit accumulator: plain i16 add/sub/and/or/xor always
+  // narrow to byte-splits here (so legalizer-generated i16 ops -- e.g. pointer
+  // arithmetic -- narrow too). The MOSNative16Profitability pre-legalizer pass
+  // rewrites only profitable (long-chain) i16 ops to the G_NATIVE16_* opcodes,
+  // which are target-generic and pass through this legalizer untouched on their
+  // way to native REP/SEP selection.
 
   // Constants
 
@@ -146,25 +149,18 @@ MOSLegalizerInfo::MOSLegalizerInfo(const MOSSubtarget &STI) {
   // Integer Operations
 
   getActionDefinitionsBuilder({G_ADD, G_SUB})
-      .legalFor(Nat16 ? std::initializer_list<LLT>{S8, S16}
-                      : std::initializer_list<LLT>{S8})
+      .legalFor({S8})
       .widenScalarToNextMultipleOf(0, 8)
       .custom();
 
-  // With the feature, S16 is added to legalFor (checked before maxScalar, so it
-  // stays legal), but maxScalar stays at S8 so WIDER types (s32/s64, e.g. in
-  // soft-float libcalls) still narrow straight to s8 as upstream does -- not to
-  // s16, which would need an s64->s16 G_UNMERGE_VALUES that is not legal.
   getActionDefinitionsBuilder({G_AND, G_OR})
-      .legalFor(Nat16 ? std::initializer_list<LLT>{S8, S16}
-                      : std::initializer_list<LLT>{S8})
+      .legalFor({S8})
       .widenScalarToNextMultipleOf(0, 8)
       .maxScalar(0, S8)
       .unsupported();
 
   getActionDefinitionsBuilder(G_XOR)
-      .legalFor(Nat16 ? std::initializer_list<LLT>{S8, S16}
-                      : std::initializer_list<LLT>{S8})
+      .legalFor({S8})
       .customFor({S1})
       .widenScalarToNextMultipleOf(0, 8)
       .maxScalar(0, S8)

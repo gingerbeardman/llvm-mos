@@ -43,6 +43,7 @@
 #include "MOSLowerSelect.h"
 #include "MOSMachineFunctionInfo.h"
 #include "MOSMachineScheduler.h"
+#include "MOSNative16Profitability.h"
 #include "MOSNonReentrant.h"
 #include "MOSPostRAScavenging.h"
 #include "MOSShiftRotateChain.h"
@@ -246,6 +247,11 @@ void MOSPassConfig::addPreLegalizeMachineIR() {
   if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(createMOSCombiner());
     addPass(createMOSShiftRotateChainPass());
+    // Decide, per i16 op, whether to keep it for native 16-bit accumulator
+    // selection or narrow it to a byte-split now (no-op unless the feature is
+    // on). Must precede the legalizer so short chains take the normal narrowing
+    // path that yields stock's register-resident byte-split.
+    addPass(createMOSNative16ProfitabilityPass());
   }
 }
 

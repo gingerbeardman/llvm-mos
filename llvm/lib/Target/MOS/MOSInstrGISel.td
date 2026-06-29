@@ -49,6 +49,24 @@ def G_SBC : MOSGenericInstruction {
   let InOperandList = (ins type0:$l, type0:$r, type1:$cin);
 }
 
+// Native 16-bit accumulator chain ops (+native-16bit-accumulator). The
+// profitability pass (pre-legalizer) rewrites a *long* i16 op chain to these so
+// they survive the legalizer at i16 and select to native REP/SEP regions, while
+// plain i16 ops -- including the ones the legalizer itself generates for pointer
+// arithmetic -- narrow to byte-splits. Being target-specific generic opcodes
+// (like G_SBC) they are not isPreISelGenericOpcode, so the legalizer and its
+// machine verifier pass them through untouched; the instruction selector lowers
+// them in C++ to the Imag16 pseudos.
+class MOSNative16GenericOp : MOSGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$l, type0:$r);
+}
+def G_NATIVE16_ADD : MOSNative16GenericOp;
+def G_NATIVE16_SUB : MOSNative16GenericOp;
+def G_NATIVE16_AND : MOSNative16GenericOp;
+def G_NATIVE16_OR  : MOSNative16GenericOp;
+def G_NATIVE16_XOR : MOSNative16GenericOp;
+
 // Generalized 8-bit load using the zero page indexed addressing mode. The base
 // argument isn't a pointer; it's either a global value or an 8-bit immediate.
 // The index argument is an 8-bit scalar. Additionally expects a

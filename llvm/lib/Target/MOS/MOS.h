@@ -26,6 +26,7 @@ void initializeMOSInsertCopiesPass(PassRegistry &);
 void initializeMOSInternalizePass(PassRegistry &);
 void initializeMOSLateOptimizationPass(PassRegistry &);
 void initializeMOSLowerSelectPass(PassRegistry &);
+void initializeMOSNative16ProfitabilityPass(PassRegistry &);
 void initializeMOSNonReentrantPass(PassRegistry &);
 void initializeMOSPostRAScavengingPass(PassRegistry &);
 void initializeMOSShiftRotateChainPass(PassRegistry &);

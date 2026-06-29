@@ -40,6 +40,7 @@ add_llvm_target(MOSCodeGen
   MOSLowerSelect.cpp
   MOSMCInstLower.cpp
   MOSMachineScheduler.cpp
+  MOSNative16Profitability.cpp
   MOSNonReentrant.cpp
   MOSPostRAScavenging.cpp
   MOSRegisterBankInfo.cpp

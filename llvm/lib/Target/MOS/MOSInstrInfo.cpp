@@ -1005,10 +1005,13 @@ static void expandNative16(MachineIRBuilder &Builder, unsigned InnerOp,
   Register Dlo = TRI.getSubReg(Dst, MOS::sublo);
 
   Builder.buildInstr(MOS::REP_Immediate).addImm(0x20);
+  // CLC/SEC are raw encoding instructions with no MIR Defs; ADC16Imag/SBC16Imag
+  // carry an implicit use of $c, so spell out the implicit-def here or the
+  // post-expansion machine verifier flags $c as undefined.
   if (IsAdd)
-    Builder.buildInstr(MOS::CLC_Implied);
+    Builder.buildInstr(MOS::CLC_Implied).addDef(MOS::C, RegState::Implicit);
   if (IsSub)
-    Builder.buildInstr(MOS::SEC_Implied);
+    Builder.buildInstr(MOS::SEC_Implied).addDef(MOS::C, RegState::Implicit);
   Builder.buildInstr(MOS::LDA16Imag).addUse(Llo);
   Builder.buildInstr(InnerOp).addUse(Rlo);
   Builder.buildInstr(MOS::STA16Imag).addUse(Dlo);

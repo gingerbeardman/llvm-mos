@@ -79,6 +79,7 @@ private:
   // tablegen.
   bool selectAddSub(MachineInstr &MI);
   bool selectLogical(MachineInstr &MI);
+  bool selectNative16(MachineInstr &MI);
 
   // Post-tablegen selection functions. If these return false, it is an error.
   bool selectBrCondImm(MachineInstr &MI);
@@ -214,6 +215,12 @@ bool MOSInstructionSelector::select(MachineInstr &MI) {
     return false;
   case MOS::G_BRCOND_IMM:
     return selectBrCondImm(MI);
+  case MOS::G_NATIVE16_ADD:
+  case MOS::G_NATIVE16_SUB:
+  case MOS::G_NATIVE16_AND:
+  case MOS::G_NATIVE16_OR:
+  case MOS::G_NATIVE16_XOR:
+    return selectNative16(MI);
   case MOS::G_SBC:
     return selectSbc(MI);
   case MOS::G_FRAME_INDEX:
@@ -1089,6 +1096,43 @@ bool MOSInstructionSelector::selectBrCondImm(MachineInstr &MI) {
 
 // Although some G_SBC instructions can be folded in to their (branch) uses,
 // others need to be selected directly.
+// Lower a G_NATIVE16_* chain op (placed by MOSNative16Profitability) to its
+// Imag16 native-accumulator pseudo. The pseudo brackets its own REP #$20 / SEP
+// #$20 in post-RA expansion; the late-opt pass later fuses adjacent regions in a
+// chain into one REP/SEP. $l is tied to $dst (in-place), and A + flags are
+// implicit-def'd (added from the pseudo's MCInstrDesc by buildInstr).
+bool MOSInstructionSelector::selectNative16(MachineInstr &MI) {
+  unsigned Pseudo;
+  switch (MI.getOpcode()) {
+  case MOS::G_NATIVE16_ADD:
+    Pseudo = MOS::ADCImag16;
+    break;
+  case MOS::G_NATIVE16_SUB:
+    Pseudo = MOS::SBCImag16;
+    break;
+  case MOS::G_NATIVE16_AND:
+    Pseudo = MOS::ANDImag16;
+    break;
+  case MOS::G_NATIVE16_OR:
+    Pseudo = MOS::ORAImag16;
+    break;
+  case MOS::G_NATIVE16_XOR:
+    Pseudo = MOS::EORImag16;
+    break;
+  default:
+    return false;
+  }
+
+  MachineIRBuilder Builder(MI);
+  auto Instr = Builder.buildInstr(
+      Pseudo, {MI.getOperand(0).getReg()},
+      {MI.getOperand(1).getReg(), MI.getOperand(2).getReg()});
+  Instr->tieOperands(0, 1); // $l = $dst
+  constrainSelectedInstRegOperands(*Instr.getInstr(), TII, TRI, RBI);
+  MI.eraseFromParent();
+  return true;
+}
+
 bool MOSInstructionSelector::selectSbc(MachineInstr &MI) {
   MachineIRBuilder Builder(MI);
   const auto &MRI = *Builder.getMRI();
