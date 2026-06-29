@@ -49,14 +49,53 @@ public:
   void lowerCmpZero(MachineInstr &MI) const;
   bool combineLdImm(MachineBasicBlock &MBB) const;
   bool tailJMP(MachineBasicBlock &MBB) const;
+  bool mergeNative16Regions(MachineBasicBlock &MBB) const;
 };
 
 bool MOSLateOptimization::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
   for (MachineBasicBlock &MBB : MF) {
+    Changed |= mergeNative16Regions(MBB);
     Changed |= lowerCmpZeros(MBB);
     Changed |= combineLdImm(MBB);
     Changed |= tailJMP(MBB);
+  }
+  return Changed;
+}
+
+// Merge adjacent native-16 accumulator regions. Each i16 op expands to
+// REP #$20; ...; STA16 X; SEP #$20, and the next to REP #$20; LDA16 X; ...
+// When two such regions are adjacent on the same slot X, the
+// "STA16 X / SEP #$20 / REP #$20 / LDA16 X" quadruple between them is a
+// store-then-reload of X around a mode toggle that nets to nothing: the 16-bit
+// value is preserved in A and we end back in M=0, and nothing reads X in
+// between. Deleting it threads the value through A across the whole chain,
+// leaving one REP at the head and one SEP at the tail.
+bool MOSLateOptimization::mergeNative16Regions(MachineBasicBlock &MBB) const {
+  bool Changed = false;
+  MachineInstr *MI = MBB.empty() ? nullptr : &MBB.front();
+  while (MI) {
+    MachineInstr *Next = MI->getNextNode();
+    if (MI->getOpcode() == MOS::STA16Imag) {
+      MachineInstr *Sep = MI->getNextNode();
+      MachineInstr *Rep = Sep ? Sep->getNextNode() : nullptr;
+      MachineInstr *Lda = Rep ? Rep->getNextNode() : nullptr;
+      if (Sep && Rep && Lda &&
+          Sep->getOpcode() == MOS::SEP_Immediate && Sep->getOperand(0).isImm() &&
+          Sep->getOperand(0).getImm() == 0x20 &&
+          Rep->getOpcode() == MOS::REP_Immediate && Rep->getOperand(0).isImm() &&
+          Rep->getOperand(0).getImm() == 0x20 &&
+          Lda->getOpcode() == MOS::LDA16Imag &&
+          MI->getOperand(0).getReg() == Lda->getOperand(0).getReg()) {
+        Next = Lda->getNextNode();
+        Lda->eraseFromParent();
+        Rep->eraseFromParent();
+        Sep->eraseFromParent();
+        MI->eraseFromParent();
+        Changed = true;
+      }
+    }
+    MI = Next;
   }
   return Changed;
 }

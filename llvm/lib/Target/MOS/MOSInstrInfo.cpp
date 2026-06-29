@@ -988,6 +988,34 @@ MOSInstrInfo::getRegClass(const MCInstrDesc &MCID, unsigned OpNum) const {
   return RC;
 }
 
+// Expand a native 16-bit accumulator pseudo (experimental) into a self-
+// contained REP #$20 ... SEP #$20 region. The Imag16 dst is tied to $l, so the
+// op is in-place. zp opcodes operate on 16 bits while M=0. Bracketing is fully
+// internal, so M=0 never escapes this instruction.
+static void expandNative16(MachineIRBuilder &Builder, unsigned InnerOp,
+                           bool IsAdd, bool IsSub) {
+  MachineInstr &MI = *Builder.getInsertPt();
+  const TargetRegisterInfo &TRI =
+      *Builder.getMF().getSubtarget().getRegisterInfo();
+  Register Dst = MI.getOperand(0).getReg(); // tied to $l (in-place)
+  Register L = MI.getOperand(1).getReg();
+  Register R = MI.getOperand(2).getReg();
+  Register Llo = TRI.getSubReg(L, MOS::sublo);
+  Register Rlo = TRI.getSubReg(R, MOS::sublo);
+  Register Dlo = TRI.getSubReg(Dst, MOS::sublo);
+
+  Builder.buildInstr(MOS::REP_Immediate).addImm(0x20);
+  if (IsAdd)
+    Builder.buildInstr(MOS::CLC_Implied);
+  if (IsSub)
+    Builder.buildInstr(MOS::SEC_Implied);
+  Builder.buildInstr(MOS::LDA16Imag).addUse(Llo);
+  Builder.buildInstr(InnerOp).addUse(Rlo);
+  Builder.buildInstr(MOS::STA16Imag).addUse(Dlo);
+  Builder.buildInstr(MOS::SEP_Immediate).addImm(0x20);
+  MI.eraseFromParent();
+}
+
 bool MOSInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   MachineIRBuilder Builder(MI);
 
@@ -1039,6 +1067,23 @@ bool MOSInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   // Control flow
   case MOS::GBR:
     expandGBR(Builder);
+    break;
+
+  // Native 16-bit accumulator pseudos (experimental).
+  case MOS::ADCImag16:
+    expandNative16(Builder, MOS::ADC16Imag, /*IsAdd=*/true, /*IsSub=*/false);
+    break;
+  case MOS::SBCImag16:
+    expandNative16(Builder, MOS::SBC16Imag, /*IsAdd=*/false, /*IsSub=*/true);
+    break;
+  case MOS::ANDImag16:
+    expandNative16(Builder, MOS::AND16Imag, false, false);
+    break;
+  case MOS::ORAImag16:
+    expandNative16(Builder, MOS::ORA16Imag, false, false);
+    break;
+  case MOS::EORImag16:
+    expandNative16(Builder, MOS::EOR16Imag, false, false);
     break;
   }
 

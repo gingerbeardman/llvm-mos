@@ -626,3 +626,63 @@ def : Pat<(i8 (trunc Imag16:$s)), (EXTRACT_SUBREG Imag16:$s, sublo)>;
 
 def : Pat<(i1 imm:$s), (LDImm1 imm:$s)>;
 def : Pat<(i8 imm:$s), (LDImm imm:$s)>;
+
+//===---------------------------------------------------------------------===//
+// Native 16-bit accumulator (experimental; +native-16bit-accumulator).
+//
+// i16 add/sub/and/or/xor are selected to these Imag16-tied pseudos. Each is
+// atomic from the register allocator's view: its post-RA expansion brackets
+// REP #$20 ... SEP #$20 entirely inside itself (see expandNative16), so M=0
+// never escapes the instruction. Clobbers A + flags accordingly.
+//===---------------------------------------------------------------------===//
+
+let Predicates = [HasNative16BitAccumulator] in {
+
+// Outer pseudos: selected from generic i16 ops, expanded post-RA.
+class MOSNative16RR : MOSLogicalInstr {
+  let OutOperandList = (outs Imag16:$dst);
+  let InOperandList = (ins Imag16:$l, Imag16:$r);
+  let Constraints = "$l = $dst";
+  let Defs = [A, C, N, V, Z];
+  let isReMaterializable = false;
+}
+def ADCImag16 : MOSNative16RR { let isCommutable = true; }
+def SBCImag16 : MOSNative16RR;
+def ANDImag16 : MOSNative16RR { let isCommutable = true; }
+def ORAImag16 : MOSNative16RR { let isCommutable = true; }
+def EORImag16 : MOSNative16RR { let isCommutable = true; }
+
+def : Pat<(i16 (add Imag16:$l, Imag16:$r)), (ADCImag16 Imag16:$l, Imag16:$r)>;
+def : Pat<(i16 (sub Imag16:$l, Imag16:$r)), (SBCImag16 Imag16:$l, Imag16:$r)>;
+def : Pat<(i16 (and Imag16:$l, Imag16:$r)), (ANDImag16 Imag16:$l, Imag16:$r)>;
+def : Pat<(i16 (or  Imag16:$l, Imag16:$r)), (ORAImag16 Imag16:$l, Imag16:$r)>;
+def : Pat<(i16 (xor Imag16:$l, Imag16:$r)), (EORImag16 Imag16:$l, Imag16:$r)>;
+
+// Inner declarative steps emitted by expandNative16, valid only inside a
+// REP/SEP (M=0) region. Each maps its Imag8 low-byte operand to a ZeroPage
+// address; in M=0 the ZeroPage opcode operates on 16 bits.
+let isCodeGenOnly = true in {
+  def LDA16Imag : MOSLogicalInstr, PseudoInstExpansion<(LDA_ZeroPage addr8:$r)> {
+    let InOperandList = (ins Imag8:$r); let Defs = [A]; let mayLoad = true;
+  }
+  def STA16Imag : MOSLogicalInstr, PseudoInstExpansion<(STA_ZeroPage addr8:$r)> {
+    let InOperandList = (ins Imag8:$r); let Uses = [A]; let mayStore = true;
+  }
+  def ADC16Imag : MOSLogicalInstr, PseudoInstExpansion<(ADC_ZeroPage addr8:$r)> {
+    let InOperandList = (ins Imag8:$r); let Uses = [A, C]; let Defs = [A, C, N, V, Z]; let mayLoad = true;
+  }
+  def SBC16Imag : MOSLogicalInstr, PseudoInstExpansion<(SBC_ZeroPage addr8:$r)> {
+    let InOperandList = (ins Imag8:$r); let Uses = [A, C]; let Defs = [A, C, N, V, Z]; let mayLoad = true;
+  }
+  def AND16Imag : MOSLogicalInstr, PseudoInstExpansion<(AND_ZeroPage addr8:$r)> {
+    let InOperandList = (ins Imag8:$r); let Uses = [A]; let Defs = [A, N, Z]; let mayLoad = true;
+  }
+  def ORA16Imag : MOSLogicalInstr, PseudoInstExpansion<(ORA_ZeroPage addr8:$r)> {
+    let InOperandList = (ins Imag8:$r); let Uses = [A]; let Defs = [A, N, Z]; let mayLoad = true;
+  }
+  def EOR16Imag : MOSLogicalInstr, PseudoInstExpansion<(EOR_ZeroPage addr8:$r)> {
+    let InOperandList = (ins Imag8:$r); let Uses = [A]; let Defs = [A, N, Z]; let mayLoad = true;
+  }
+}
+
+} // Predicates = [HasNative16BitAccumulator]

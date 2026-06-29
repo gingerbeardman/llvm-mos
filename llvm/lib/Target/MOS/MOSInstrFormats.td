@@ -57,6 +57,14 @@ def HasW65816 : Predicate<"Subtarget->hasW65816()">,
   let PredicateName = "FeatureW65816";
 }
 
+// Experimental native 16-bit accumulator codegen (off by default).
+def HasNative16BitAccumulator
+    : Predicate<"Subtarget->hasNative16BitAccumulator()">,
+      AssemblerPredicate<(all_of FeatureNative16BitAccumulator),
+                         "native 16-bit accumulator"> {
+  let PredicateName = "FeatureNative16BitAccumulator";
+}
+
 def Has65EL02 : Predicate<"Subtarget->has65EL02()">,
                 AssemblerPredicate<(all_of Feature65EL02), "65EL02"> {
   let PredicateName = "Feature65EL02";

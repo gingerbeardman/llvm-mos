@@ -117,6 +117,9 @@ public:
 
   bool hasW65816Or65EL02() const { return HasW65816Insns || Has65EL02Insns; }
 
+  // Experimental native 16-bit accumulator codegen (off by default).
+  bool hasNative16BitAccumulator() const { return HasNative16BitAccumulator; }
+
 private:
   // Subtarget feature settings
   // See MOS.td for details.
@@ -129,6 +132,7 @@ private:
   bool HasR65C02Insns = false;
   bool HasW65C02Insns = false;
   bool HasW65816Insns = false;
+  bool HasNative16BitAccumulator = false;
   bool Has65EL02Insns = false;
   bool Has65CE02Insns = false;
   bool HasHUC6280Insns = false;

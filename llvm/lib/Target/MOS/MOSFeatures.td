@@ -19,3 +19,11 @@ def FeatureStaticStack :
   SubtargetFeature<
     "static-stack", "StaticStack", "true",
     "Whether to use statically-allocated stack frames if possible.">;
+
+// Experimental: emit native 65816 16-bit accumulator regions (REP/SEP) for i16
+// add/sub/and/or/xor. Off by default; no CPU implies it. The ABI and 8-bit
+// accumulator at function boundaries are unchanged.
+def FeatureNative16BitAccumulator :
+  SubtargetFeature<
+    "native-16bit-accumulator", "HasNative16BitAccumulator", "true",
+    "Emit native 65816 16-bit accumulator regions (REP/SEP) for i16 work.">;
